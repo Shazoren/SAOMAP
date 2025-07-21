@@ -121,10 +121,10 @@
     // --- CHARGEMENT ET AFFICHAGE DES WAYPOINTS DEPUIS L'API ---
     async function fetchWaypoints() {
       try {
-        const res = await fetch('/api/waypoints');
+        const res = await fetch('/api/waypoint');
         return await res.json();
       } catch (err) {
-        console.error('Erreur fetch /api/waypoints:', err);
+        console.error('Erreur fetch /api/waypoint:', err);
         return [];
       }
     }
