@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Carte Interactive</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <style>
+    body, html { margin: 0; height: 100%; }
+    #map { width: 100%; height: 100%; }
+    #sidebar {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 250px;
+      max-height: calc(100% - 20px);
+      overflow-y: auto;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    #sidebar h3 { margin-top: 0; }
+    .category-item { margin-bottom: 5px; }
+    #captureBtn {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #captureBtn.active { background: #218838; }
+    #lastCoords {
+      padding: 6px;
+      background: #f8f9fa;
+      border: 1px solid #ced4da;
+      border-radius: 3px;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+  <div id="sidebar">
+    <h3>Capture de coordonnées</h3>
+    <button id="captureBtn">Capture Coordinates</button>
+    <div id="lastCoords">Clique sur “Capture Coordinates” puis sur la carte.</div>
+    <hr/>
+    <h3>Filtres</h3>
+    <div id="filters"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // --- CONFIGURATION DE LA CARTE ---
+    const imageUrl  = 'mapsao.png';    // ton image
+    const mapWidth  = 4952;         // largeur en px
+    const mapHeight = 4952;         // hauteur en px
+
+    const map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -3,
+      maxZoom: 2
+    });
+
+    const bounds = [[0, 0], [mapHeight, mapWidth]];
+    L.imageOverlay(imageUrl, bounds).addTo(map);
+    map.fitBounds(bounds);
+    map.setMaxBounds(bounds);
+
+    // --- COULEURS PAR CATÉGORIE ---
+    const categoryColors = {
+      Donjon:       'red',
+      Ressource:    'green',
+      Ville:        'black',
+      Pnj:          'orange',
+      Mobs:         'purple',
+      Uncategorized:'gray'
+    };
+
+    // --- INITIALISATION DES LAYERS ET DES CHECKBOXES ---
+    const categories = {};
+
+    function buildFilters() {
+      const container = document.getElementById('filters');
+      for (const cat of Object.keys(categoryColors)) {
+        const layer = L.layerGroup().addTo(map);
+        categories[cat] = layer;
+
+        const id = `chk_${cat}`;
+        const div = document.createElement('div');
+        div.className = 'category-item';
+        div.innerHTML = `
+          <label>
+            <input type="checkbox" id="${id}" checked />
+            <span style="color:${categoryColors[cat]}; font-weight:bold">
+              ${cat}
+            </span>
+          </label>
+        `;
+        container.appendChild(div);
+
+        document.getElementById(id)
+          .addEventListener('change', e => {
+            e.target.checked ? map.addLayer(layer) : map.removeLayer(layer);
+          });
+      }
+    }
+
+    // --- CHARGEMENT ET AFFICHAGE DES WAYPOINTS DEPUIS L'API ---
+    async function fetchWaypoints() {
+      try {
+        const res = await fetch('/api/waypoints');
+        return await res.json();
+      } catch (err) {
+        console.error('Erreur fetch /api/waypoints:', err);
+        return [];
+      }
+    }
+
+    async function displayWaypoints() {
+      const waypoints = await fetchWaypoints();
+      waypoints.forEach(wp => {
+        const latlng = [wp.y, wp.x]; // [pixelY, pixelX]
+        const color  = categoryColors[wp.category] || categoryColors['Uncategorized'];
+        L.circleMarker(latlng, {
+          radius: 3,
+          color,
+          fillOpacity: 0.8
+        })
+        .bindPopup(`<b>${wp.name}</b><br/>${wp.gameCoords}`)
+        .addTo(categories[wp.category] || categories['Uncategorized']);
+      });
+    }
+
+    // --- CAPTURE DE COORDONNÉES AU CLIC ---
+    const captureBtn  = document.getElementById('captureBtn');
+    const lastCoords  = document.getElementById('lastCoords');
+    let isCapturing   = false;
+
+    captureBtn.addEventListener('click', () => {
+      isCapturing = !isCapturing;
+      captureBtn.classList.toggle('active', isCapturing);
+      lastCoords.textContent = isCapturing
+        ? 'Clique sur la carte pour capturer…'
+        : 'Capture annulée.';
+      map.getContainer().style.cursor = isCapturing ? 'crosshair' : '';
+    });
+
+    map.on('click', e => {
+      if (!isCapturing) return;
+      const y = Math.round(e.latlng.lat);
+      const x = Math.round(e.latlng.lng);
+      lastCoords.textContent = `Coords pixels : [${y}, ${x}]`;
+      // On désactive après un clic
+      isCapturing = false;
+      captureBtn.classList.remove('active');
+      map.getContainer().style.cursor = '';
+    });
+
+    // --- INITIALISATION GLOBALE ---
+    buildFilters();
+    displayWaypoints();
+  </script>
+</body>
+</html>
